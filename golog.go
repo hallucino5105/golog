@@ -37,15 +37,23 @@ type HeaderDefaultParam struct {
 	Caller string
 }
 
+type StdOutput struct {
+	logger *GoLog
+}
+
+type ErrOutput struct {
+	logger *GoLog
+}
+
 type Level uint8
-type HeaderMap map[string]Level
-type ColorFunc func(...interface{}) string
+type colorFunc func(...interface{}) string
 
 const (
 	unknown Level = iota
 	LTrace
 	LDebug
 	LInfo
+	LNotice
 	LWarning
 	LError
 	LPanic
@@ -54,14 +62,19 @@ const (
 var glstd *GoLog
 var glerr *GoLog
 
-func (level Level) Color() ColorFunc {
+var Std *StdOutput
+var Err *ErrOutput
+
+func (level Level) Color() colorFunc {
 	switch level {
 	case LTrace:
-		return color.New(color.FgMagenta).SprintFunc()
+		return color.New(color.FgWhite).SprintFunc()
 	case LDebug:
 		return color.New(color.FgBlue).SprintFunc()
 	case LInfo:
 		return color.New(color.FgGreen).SprintFunc()
+	case LNotice:
+		return color.New(color.FgMagenta).SprintFunc()
 	case LWarning:
 		return color.New(color.FgYellow).SprintFunc()
 	case LError:
@@ -76,17 +89,19 @@ func (level Level) Color() ColorFunc {
 func (level Level) String() string {
 	switch level {
 	case LTrace:
-		return "trace"
+		return " trace"
 	case LDebug:
-		return "debug"
+		return " debug"
 	case LInfo:
-		return " info"
+		return "  info"
+	case LNotice:
+		return "notice"
 	case LWarning:
-		return " warn"
+		return "  warn"
 	case LError:
-		return "error"
+		return " error"
 	case LPanic:
-		return "panic"
+		return " panic"
 	}
 
 	return "unknown"
@@ -117,6 +132,9 @@ func SetupLogger(option *GoLogOption) {
 
 	glstd = NewGoLog(os.Stdout, option)
 	glerr = NewGoLog(os.Stderr, option)
+
+	Std = &StdOutput{logger: getStdLogger()}
+	Err = &ErrOutput{logger: getErrLogger()}
 }
 
 func register(gl *GoLog) {
@@ -237,74 +255,68 @@ func getErrLogger() *GoLog {
 	return glerr
 }
 
-func SLog(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, logger.DefaultLevel))
+func (o *StdOutput) Log(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, o.logger.DefaultLevel))
 }
 
-func STrace(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LTrace))
+func (o *StdOutput) Trace(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LTrace))
 }
 
-func SDebug(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LDebug))
+func (o *StdOutput) Debug(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LDebug))
 }
 
-func SInfo(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LInfo))
+func (o *StdOutput) Info(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LInfo))
 }
 
-func SWarn(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LWarning))
+func (o *StdOutput) Notice(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LNotice))
 }
 
-func SError(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LError))
+func (o *StdOutput) Warn(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LWarning))
 }
 
-func SPanic(text string, args ...interface{}) {
-	logger := getStdLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LPanic))
+func (o *StdOutput) Error(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LError))
+}
+
+func (o *StdOutput) Panic(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LPanic))
 	os.Exit(-1)
 }
 
-func ELog(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, logger.DefaultLevel))
+func (o *ErrOutput) Log(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, o.logger.DefaultLevel))
 }
 
-func ETrace(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LTrace))
+func (o *ErrOutput) Trace(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LTrace))
 }
 
-func EDebug(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LDebug))
+func (o *ErrOutput) Debug(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LDebug))
 }
 
-func EInfo(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LInfo))
+func (o *ErrOutput) Info(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LInfo))
 }
 
-func EWarn(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LWarning))
+func (o *ErrOutput) Notice(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LNotice))
 }
 
-func EError(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LError))
+func (o *ErrOutput) Warn(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LWarning))
 }
 
-func EPanic(text string, args ...interface{}) {
-	logger := getErrLogger()
-	logger.write(getFormattedText(sprintf(text, args), logger, LPanic))
+func (o *ErrOutput) Error(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LError))
+}
+
+func (o *ErrOutput) Panic(text string, args ...interface{}) {
+	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LPanic))
 	os.Exit(-1)
 }
