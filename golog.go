@@ -37,19 +37,18 @@ type HeaderDefaultParam struct {
 	Caller string
 }
 
-type StdOutput struct {
-	logger *GoLog
-}
-
-type ErrOutput struct {
-	logger *GoLog
-}
-
+type Output uint8
 type Level uint8
 type colorFunc func(...interface{}) string
 
 const (
-	unknown Level = iota
+	unknownOutput Output = iota
+	OStdout
+	OStderr
+)
+
+const (
+	unknownLevel Level = iota
 	LTrace
 	LDebug
 	LInfo
@@ -61,9 +60,8 @@ const (
 
 var glstd *GoLog
 var glerr *GoLog
-
-var Std *StdOutput
-var Err *ErrOutput
+var glcur *GoLog
+var currentOutput Output = OStderr
 
 func (level Level) Color() colorFunc {
 	switch level {
@@ -107,7 +105,7 @@ func (level Level) String() string {
 	return "unknown"
 }
 
-func NewGoLog(out io.Writer, option *GoLogOption) *GoLog {
+func NewGoLog(output Output, option *GoLogOption) *GoLog {
 	gl := new(GoLog)
 
 	gl.Colorize = option.Colorize
@@ -115,7 +113,15 @@ func NewGoLog(out io.Writer, option *GoLogOption) *GoLog {
 	gl.DefaultLevel = LInfo
 	gl.Header = nil
 	gl.UserHeader = ""
-	gl.out = out
+
+	switch output {
+	case OStdout:
+		gl.out = os.Stdout
+	case OStderr:
+		gl.out = os.Stderr
+	default:
+		log.Panic("Output is unknown")
+	}
 
 	register(gl)
 
@@ -130,15 +136,31 @@ func SetupLogger(option *GoLogOption) {
 		}
 	}
 
-	glstd = NewGoLog(os.Stdout, option)
-	glerr = NewGoLog(os.Stderr, option)
+	glstd = NewGoLog(OStdout, option)
+	glerr = NewGoLog(OStderr, option)
 
-	Std = &StdOutput{logger: getStdLogger()}
-	Err = &ErrOutput{logger: getErrLogger()}
+	SetOutput(currentOutput)
 }
 
 func register(gl *GoLog) {
 	gl.setDefaultHeader()
+}
+
+func SetOutput(output Output) {
+	switch output {
+	case OStdout:
+		glcur = getStdLogger()
+	case OStderr:
+		glcur = getErrLogger()
+	default:
+		log.Panic("Output is unknown")
+	}
+
+	currentOutput = output
+}
+
+func GetCurrentOutput() Output {
+	return currentOutput
 }
 
 func (gl *GoLog) setDefaultHeader() {
@@ -235,10 +257,6 @@ func getFormattedText(text string, logger *GoLog, level Level) (string, Level) {
 	return header + text, level
 }
 
-func sprintf(text string, args []interface{}) string {
-	return fmt.Sprintf(text, args...)
-}
-
 func getStdLogger() *GoLog {
 	if glstd == nil {
 		log.Panic("The logger object is not initialized. Please call SetupLogger().")
@@ -255,68 +273,55 @@ func getErrLogger() *GoLog {
 	return glerr
 }
 
-func (o *StdOutput) Log(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, o.logger.DefaultLevel))
+func getCurrentLogger() *GoLog {
+	if glcur == nil {
+		SetOutput(currentOutput)
+	}
+
+	return glcur
 }
 
-func (o *StdOutput) Trace(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LTrace))
+func sprintf(text string, args []interface{}) string {
+	return fmt.Sprintf(text, args...)
 }
 
-func (o *StdOutput) Debug(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LDebug))
+func Log(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, logger.DefaultLevel))
 }
 
-func (o *StdOutput) Info(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LInfo))
+func Trace(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LTrace))
 }
 
-func (o *StdOutput) Notice(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LNotice))
+func Debug(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LDebug))
 }
 
-func (o *StdOutput) Warn(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LWarning))
+func Info(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LInfo))
 }
 
-func (o *StdOutput) Error(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LError))
+func Notice(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LNotice))
 }
 
-func (o *StdOutput) Panic(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LPanic))
-	os.Exit(-1)
+func Warn(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LWarning))
 }
 
-func (o *ErrOutput) Log(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, o.logger.DefaultLevel))
+func Error(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LError))
 }
 
-func (o *ErrOutput) Trace(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LTrace))
-}
-
-func (o *ErrOutput) Debug(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LDebug))
-}
-
-func (o *ErrOutput) Info(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LInfo))
-}
-
-func (o *ErrOutput) Notice(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LNotice))
-}
-
-func (o *ErrOutput) Warn(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LWarning))
-}
-
-func (o *ErrOutput) Error(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LError))
-}
-
-func (o *ErrOutput) Panic(text string, args ...interface{}) {
-	o.logger.write(getFormattedText(sprintf(text, args), o.logger, LPanic))
+func Panic(text string, args ...interface{}) {
+	logger := getCurrentLogger()
+	logger.write(getFormattedText(sprintf(text, args), logger, LPanic))
 	os.Exit(-1)
 }
